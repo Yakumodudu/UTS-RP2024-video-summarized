@@ -333,7 +333,7 @@ def display_summaries(summaries: List[Dict[str, str]]):
     在 Streamlit 中显示摘要。
     """
     for summary_dict in summaries:
-        chapter_title = f"## 章节: {summary_dict['chapter']}"
+        chapter_title = f"## Chapter: {summary_dict['chapter']}"
         st.markdown(chapter_title)
 
         if '\n- ' in summary_dict['summary']:
@@ -348,9 +348,9 @@ def display_summaries(summaries: List[Dict[str, str]]):
 # =================== 主应用逻辑 ===================
 
 def main():
-    st.set_page_config(page_title="YouTube 视频摘要生成器", layout="wide")
+    st.set_page_config(page_title="YouTube Video Summarizer", layout="wide")
     youtube_logo_url = "https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_(2017).svg"
-    title_with_logo = f'<img src="{youtube_logo_url}" width="100" style="vertical-align: middle;"> <span style="font-size:50px; vertical-align: middle; font-weight: bold; margin-left: 10px;">视频摘要生成器</span>'
+    title_with_logo = f'<img src="{youtube_logo_url}" width="100" style="vertical-align: middle;"> <span style="font-size:50px; vertical-align: middle; font-weight: bold; margin-left: 10px;">YouTube Video Summarizer</span>'
     st.markdown(title_with_logo, unsafe_allow_html=True)
 
     # 初始化会话状态
@@ -363,85 +363,85 @@ def main():
     if 'vector_store' not in st.session_state:
         st.session_state['vector_store'] = None
 
-    st.sidebar.header("用户输入")
+    st.sidebar.header("User Input")
 
     # 输入API密钥和视频URL
-    openai_api_key = st.sidebar.text_input("输入 OpenAI API 密钥", type="password")
-    google_api_key = st.sidebar.text_input("输入 Google API 密钥", type="password")
-    video_url = st.sidebar.text_input("输入 YouTube 视频 URL")
+    openai_api_key = st.sidebar.text_input("Input OpenAI API Key", type="password")
+    google_api_key = st.sidebar.text_input("Input Google API Key", type="password")
+    video_url = st.sidebar.text_input("Input YouTube Video URL")
 
     # 检查是否填写所有部分
     all_fields_filled = all([openai_api_key, google_api_key, video_url])
 
     if all_fields_filled:
-        st.sidebar.success("所有字段已填写")
+        st.sidebar.success("All fields are completed")
         set_environment_keys({
             OPENAI_API_KEY_ENV: openai_api_key,
             GOOGLE_API_KEY_ENV: google_api_key
         })
 
     # 开始按钮
-    if st.sidebar.button("开始"):
+    if st.sidebar.button("Start"):
         if not all_fields_filled:
-            st.sidebar.error("请填写所有字段")
+            st.sidebar.error("Please fill out all fields")
             return
 
-        with st.spinner("获取视频信息..."):
+        with st.spinner("Retrieve video information..."):
             try:
                 video_info = fetch_video_info(video_url, google_api_key)
                 st.session_state['video_info'] = video_info
             except Exception as e:
                 print(f"Error while fetching video info: {e}")
-                st.error(f"获取视频信息失败: {e}")
+                st.error(f"Failed to retrieve video information: {e}")
                 return
 
-        with st.spinner("提取视频章节..."):
+        with st.spinner("Extracting video chapters..."):
             try:
                 chapters = extract_chapters(video_info.get('description', ''), video_url)
                 if chapters:
                     st.session_state['chapters_list'] = [ALL_CHAPTERS] + chapters
                 else:
-                    st.warning("未能提取到章节信息")
+                    st.warning("Failed to extract chapter information")
             except Exception as e:
-                st.error(f"提取章节失败: {e}")
+                st.error(f"Chapter extraction failed: {e}")
                 return
 
-        with st.spinner("初始化向量存储..."):
+        with st.spinner("Initializing vector storage..."):
             try:
                 vector_store = initialize_vector_store(video_url)
                 if vector_store:
                     st.session_state['vector_store'] = vector_store
                 else:
-                    st.warning("未能初始化向量存储")
+                    st.warning("Failed to initialize vector storage")
             except Exception as e:
-                st.error(f"初始化向量存储失败: {e}")
+                st.error(f"Vector storage initialization failed: {e}")
                 return
 
     # 显示视频信息
     if st.session_state['video_info']:
-        st.header("视频信息")
+        st.header("Video Info")
         video_info = st.session_state['video_info']
-        st.markdown(f"**频道标题:** {video_info.get('channelTitle', 'N/A')}")
-        st.markdown(f"**视频标题:** {video_info.get('title', 'N/A')}")
-        st.markdown(f"**标签:** {', '.join(video_info.get('tags', []))}")
+        st.markdown(f"**Channel Title:** {video_info.get('channelTitle', 'N/A')}")
+        st.markdown(f"**Video Title:** {video_info.get('title', 'N/A')}")
+        st.markdown(f"**Tags:** {', '.join(video_info.get('tags', []))}")
 
     # 章节选择和摘要类型选择
     if st.session_state['chapters_list']:
-        st.header("章节选择")
+        st.header("Chapter Selection")
         selected_chapters = st.multiselect(
-            "选择要摘要的章节",
+            "Select Chapter to Summarize",
             st.session_state['chapters_list'],
             default=[ALL_CHAPTERS]
         )
         is_valid_selection = not (ALL_CHAPTERS in selected_chapters and len(selected_chapters) > 1)
         if not is_valid_selection:
-            st.warning("不能同时选择 'All Chapters' 和具体章节")
+            st.warning("You cannot select both 'All Chapters' and specific chapters at the same time.")
 
-        summary_type = st.selectbox("选择摘要类型", ["paragraph", "bullet points"])
+        summary_type = st.selectbox("Select Summary Type", ["paragraph", "bullet points"])
 
-        if st.button("生成摘要") and is_valid_selection:
+        if st.button("Generate Summary") and is_valid_selection:
             st.session_state['summary'] = []
-            with st.spinner("生成摘要中..."):
+            with st.spinner("Generating Summary..."):
                 try:
                     chapters_to_summarize = st.session_state[
                         'chapters_list'] if ALL_CHAPTERS in selected_chapters else selected_chapters
@@ -451,24 +451,24 @@ def main():
                         if summary:
                             st.session_state['summary'].append(summary)
                         else:
-                            st.warning(f"无法生成章节 '{chapter}' 的摘要")
+                            st.warning(f"Unable to generate summary for chapter '{chapter}'")
                 except Exception as e:
-                    st.error(f"生成摘要失败: {e}")
+                    st.error(f"Failed to generate summary: {e}")
 
     # 显示摘要
     if st.session_state['summary']:
-        st.header("视频摘要")
+        st.header("Video Summary")
         display_summaries(st.session_state['summary'])
 
         # 准备 PDF 内容
-        video_info_text = f"频道标题: {st.session_state['video_info'].get('channelTitle', 'N/A')}\n视频标题: {st.session_state['video_info'].get('title', 'N/A')}\n标签: {', '.join(st.session_state['video_info'].get('tags', []))}\n"
-        full_summary_text = "\n\n".join([f"章节: {s['chapter']}\n{s['summary']}" for s in st.session_state['summary']])
+        video_info_text = f"Channel Title: {st.session_state['video_info'].get('channelTitle', 'N/A')}\nVideo Title: {st.session_state['video_info'].get('title', 'N/A')}\nTags: {', '.join(st.session_state['video_info'].get('tags', []))}\n"
+        full_summary_text = "\n\n".join([f"Chapter: {s['chapter']}\n{s['summary']}" for s in st.session_state['summary']])
 
         # 生成 PDF
         pdf_bytes = string_to_pdf_bytes(video_info_text, full_summary_text)
 
         st.download_button(
-            label="下载摘要为 PDF",
+            label="Download Summary as PDF",
             data=pdf_bytes,
             file_name="video_summary.pdf",
             mime="application/pdf"
