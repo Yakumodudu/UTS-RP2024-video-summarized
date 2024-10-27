@@ -105,15 +105,19 @@ def fetch_video_info(url: str, api_key: str) -> Dict[str, Union[str, List[str]]]
     }
 
 def load_transcript(video_url: str) -> Optional[str]:
-    """
-    加载视频的转录内容。
-    """
-    loader = YoutubeLoader.from_youtube_url(video_url, api_key='AIzaSyC6J5sSZ0XkMfNSzUnnPlZw1DM-otpb88k', add_video_info=True)
+    # 从 st.session_state 中获取 google_api_key
+    api_key = st.session_state.get('google_api_key', None)
+    if not api_key:
+        st.error("Google API Key is missing.")
+        return None
+
+    # 使用获取到的 API 密钥来加载 YouTube 视频的转录内容
+    loader = YoutubeLoader.from_youtube_url(video_url, api_key=api_key, add_video_info=True)
     documents = loader.load()
-    print(video_url)
     if not documents or not hasattr(documents[0], 'page_content') or not documents[0].page_content:
         return None
     return documents[0].page_content
+
 
 
 def chunk_transcript(transcript: str) -> List[Document]:
@@ -163,41 +167,41 @@ def extract_chapters_from_description(description: str) -> Dict[str, Union[bool,
     # 如果正则表达式未能提取章节，则使用 LLM
     chapters_existence_schema = ResponseSchema(
         name="Status",
-        description="描述中是否包含章节，回答 true 或 false。"
+        description="Does the description contain chapters? Answer true or false."
     )
     chapters_schema = ResponseSchema(
         name="Chapters",
-        description="从描述中提取章节列表，格式为 Python 列表。"
+        description="Extract the list of chapters from the description in the format of a Python list."
     )
     response_schemas = [chapters_existence_schema, chapters_schema]
     output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
     format_instructions = output_parser.get_format_instructions()
 
     prompt_template = f"""
-    请你从以下 YouTube 视频描述中提取视频的小章节标题。小章节通常列在描述中，且有可能带有时间戳（例如 '00:00'、'0:00:00' 等），并可能以 'Chapters'、'Timestamps' 等标题开头。
+    Please extract the chapter titles from the following YouTube video description. Chapters are typically listed in the description and may include timestamps (e.g., '00:00', '0:00:00') and may be prefaced by headings like 'Chapters', 'Timestamps', etc.
 
     {format_instructions}
 
-    你的任务是：
+    Your task is to:
 
-    1. 查找描述中所有的章节条目，并忽略任何广告等非章节内容。
-    2. 提取章节标题，不包括时间戳。
-    3. 输出章节标题的 Python 列表。
+    1. Identify all chapter entries in the description, ignoring any non-chapter content such as ads.
+    2. Extract the chapter titles without timestamps.
+    3. Output a Python list of chapter titles.
 
-    示例：
+    Example:
 
-    描述：
+    Description:
     '''
-    00:00 开始
-    05:30 第一章：引言
-    12:45 第二章：主要内容
-    16:00 结束语
+    00:00 Start
+    05:30 Chapter 1: Introduction
+    12:45 Chapter 2: Main Content
+    16:00 Conclusion
     '''
 
-    输出：
-    ["开始", "第一章：引言", "第二章：主要内容", "结束语"]
+    Output:
+    ["Start", "Chapter 1: Introduction", "Chapter 2: Main Content", "Conclusion"]
 
-    现在，请处理以下描述：
+    Now, please process the following description:
 
     '''{description}'''
     """
@@ -212,9 +216,7 @@ def extract_chapters_from_description(description: str) -> Dict[str, Union[bool,
 
 
 def extract_chapters_from_transcript(video_url: str) -> List[str]:
-    """
-    从转录内容中提取章节。
-    """
+    # 调用 load_transcript 函数，它会从 st.session_state 获取 API 密钥
     transcript = load_transcript(video_url)
     if not transcript:
         return []
@@ -370,6 +372,8 @@ def main():
     google_api_key = st.sidebar.text_input("Input Google API Key", type="password")
     video_url = st.sidebar.text_input("Input YouTube Video URL")
 
+    if google_api_key:
+        st.session_state['google_api_key'] = google_api_key
     # 检查是否填写所有部分
     all_fields_filled = all([openai_api_key, google_api_key, video_url])
 
