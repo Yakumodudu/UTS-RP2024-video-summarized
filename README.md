@@ -2,6 +2,8 @@ YouTube Video Summarizer
 
 API Requirements: Google API Key, OpenAI API Key
 
+Deliverable of UTS 32933 Research Project Spring 2024
+
 Supervisor: Prof. Wei Liu
 
 What it is
