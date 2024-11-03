@@ -1,4 +1,4 @@
-YouTube Video Summarizer
+# YouTube Video Summarizer
 
 API Requirements: Google API Key, OpenAI API Key
 
@@ -6,11 +6,11 @@ Deliverable of UTS 32933 Research Project Spring 2024
 
 Supervisor: Prof. Wei Liu
 
-What it is
+# What it is
 
 The YouTube Video Summarizer is a tool designed to generate concise summaries for YouTube videos that include timestamps in their descriptions. It is primarily intended for educational purposes, assisting users in quickly understanding the main content of lengthy videos. The tool extracts video information, chapters, and generates summaries using Google and GPT APIs.
 
-How it works
+# How it works
 
 Video Metadata Retrieval: Using the Google API, the tool retrieves video metadata, including the title, channel name, and tags.
 
@@ -20,7 +20,7 @@ Summary Generation: GPT API is used to summarize each chapter, providing a conde
 
 Output: Summaries are displayed in the Streamlit interface, and users can download a PDF version of the summary.
 
-Limitations
+# Limitations
 
 Requires valid Google and OpenAI API keys.
 
