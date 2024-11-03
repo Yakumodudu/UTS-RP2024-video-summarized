@@ -1,4 +1,3 @@
-
 import sys
 import os
 import re
@@ -23,21 +22,22 @@ from urllib.parse import urlparse, parse_qs
 import tiktoken
 from youtube import YoutubeLoader
 
-
-# 常量定义
+# Constant Definitions
 ALL_CHAPTERS = "All Chapters"
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
 GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
+
 
 # 初始化 SQLite3 模块（如果有特殊需求）
 __import__('sqlite3')
 import sqlite3
 
-# 移除并重新加载 sqlite3 模块（根据原代码需求）
+
+# Remove and reload the sqlite3 module (based on original code requirements)
 sys.modules['sqlite3'] = sys.modules.pop('sqlite3')
 
-# ================= 工具函数 ===================
 
+# ================ Utility Functions ================
 
 def set_environment_keys(api_keys):
     for key, value in api_keys.items():
@@ -46,7 +46,7 @@ def set_environment_keys(api_keys):
 
 def initialize_vector_store(video_url: str) -> Optional[Chroma]:
     """
-    初始化向量存储，和基于视频的转录内容。
+    Initialize the vector store and content transcription based on the video
     """
     print(f"Loading transcript for video URL")
 
@@ -64,7 +64,7 @@ def initialize_vector_store(video_url: str) -> Optional[Chroma]:
 
 def extract_video_id(url: str) -> Optional[str]:
     """
-    从URL中提取视频ID
+    Extract the video ID from the URL
     """
     parsed_url = urlparse(url)
     if parsed_url.hostname in ('www.youtube.com', 'youtube.com'):
@@ -82,19 +82,19 @@ def extract_video_id(url: str) -> Optional[str]:
 
 def fetch_video_info(url: str, api_key: str) -> Dict[str, Union[str, List[str]]]:
     """
-    获取YouTube视频信息。
+    Retrieve information about the YouTube video.
     """
     video_id = extract_video_id(url)
-    print(f"Extracted video ID: {video_id}")  # 打印提取到的video_id
+    print(f"Extracted video ID: {video_id}")  # Print the extracted video_id
     if not video_id:
-        raise ValueError("无效的 YouTube URL")
+        raise ValueError("Invalid YouTube URL")
 
     youtube = build('youtube', 'v3', developerKey=api_key)
     response = youtube.videos().list(part="snippet", id=video_id).execute()
 
     items = response.get("items")
     if not items:
-        raise ValueError("未找到视频")
+        raise ValueError("Video not found")
 
     snippet = items[0]["snippet"]
     return {
@@ -104,14 +104,16 @@ def fetch_video_info(url: str, api_key: str) -> Dict[str, Union[str, List[str]]]
         'tags': snippet.get('tags', [])
     }
 
+
 def load_transcript(video_url: str) -> Optional[str]:
-    # 从 st.session_state 中获取 google_api_key
+    # # Retrieve google_api_key from st.session_state
+
     api_key = st.session_state.get('google_api_key', None)
     if not api_key:
         st.error("Google API Key is missing.")
         return None
 
-    # 使用获取到的 API 密钥来加载 YouTube 视频的转录内容
+    # Use the obtained API key to load the transcript of the YouTube video
     loader = YoutubeLoader.from_youtube_url(video_url, api_key=api_key, add_video_info=True)
     documents = loader.load()
     if not documents or not hasattr(documents[0], 'page_content') or not documents[0].page_content:
@@ -119,10 +121,9 @@ def load_transcript(video_url: str) -> Optional[str]:
     return documents[0].page_content
 
 
-
 def chunk_transcript(transcript: str) -> List[Document]:
     """
-    将转录内容分块处理。
+    Chunk the transcript content into segments.
     """
     text_splitter = RecursiveCharacterTextSplitter(separators=["\n\n", "\n", " "], chunk_size=2000, chunk_overlap=200)
     segmented_text = text_splitter.split_text(transcript)
@@ -131,29 +132,30 @@ def chunk_transcript(transcript: str) -> List[Document]:
 
 def extract_chapters(description: str, video_url: str) -> List[str]:
     """
-    从描述或转录中提取视频章节。
+    Extract video chapters from the description or transcript.
     """
-    # 尝试从描述中提取章节
+    # Try to extract chapters from the description
     output_dict = extract_chapters_from_description(description)
     chapters_from_description = output_dict.get('Chapters', [])
 
-    # 如果描述中提取的章节少于预期，则从转录中提取
+    # If extracted chapters from the description are less than expected, extract from transcript
     if not output_dict["Status"] or len(chapters_from_description) < 3:
         chapters_from_transcript = extract_chapters_from_transcript(video_url)
-        # 合并章节，去重
+        # Merge chapters and remove duplicates
         chapters = list(set(chapters_from_description + chapters_from_transcript))
     else:
         chapters = chapters_from_description
 
     return chapters
 
+
 def extract_chapters_from_description(description: str) -> Dict[str, Union[bool, List[str]]]:
     """
-    从视频描述中提取章节。
+    Extract chapters from the video description.
     """
     import re
 
-    # 匹配时间戳和章节标题的正则表达式
+    # Regular expression to match timestamps and chapter titles
     chapter_regex = r'((?:\d{1,2}:)?\d{1,2}:\d{2})\s*-?\s*(.*)'
     matches = re.findall(chapter_regex, description)
     print(f"Number of matches found: {len(matches)}")
@@ -164,7 +166,7 @@ def extract_chapters_from_description(description: str) -> Dict[str, Union[bool,
         print("Chapters extracted successfully.")
         return {"Status": True, "Chapters": chapters}
 
-    # 如果正则表达式未能提取章节，则使用 LLM
+    # If the regex fails to extract chapters, use LLM
     chapters_existence_schema = ResponseSchema(
         name="Status",
         description="Does the description contain chapters? Answer true or false."
@@ -216,17 +218,17 @@ def extract_chapters_from_description(description: str) -> Dict[str, Union[bool,
 
 
 def extract_chapters_from_transcript(video_url: str) -> List[str]:
-    # 调用 load_transcript 函数，它会从 st.session_state 获取 API 密钥
+    # Call the load_transcript function, which retrieves the API key from st.session_state
     transcript = load_transcript(video_url)
     if not transcript:
         return []
 
-    # 减小分块大小，增加覆盖
+    # Reduce chunk size and increase overlap
     text_splitter = RecursiveCharacterTextSplitter(separators=["\n\n", "\n", " "], chunk_size=5000, chunk_overlap=1000)
     segmented_documents = text_splitter.split_text(transcript)
     docs = [Document(page_content=text) for text in segmented_documents]
 
-    # gpt的具体模板
+    # GPT model
     prompt_template = """
     你是一位视频总结助手，现在需要从提供的转录内容中提取详细的章节标题。请按照以下要求：
 
@@ -258,7 +260,7 @@ def extract_chapters_from_transcript(video_url: str) -> List[str]:
         except (SyntaxError, ValueError):
             continue
 
-    # 去重并保持顺序
+    # Remove duplicates while maintaining order
     unique_chapters = []
     seen = set()
     for chapter in chapters:
@@ -271,7 +273,7 @@ def extract_chapters_from_transcript(video_url: str) -> List[str]:
 
 def generate_video_summary(model_name: str, chapter: str, vector_store: Chroma, summary_type: str) -> Dict[str, str]:
     """
-    生成视频摘要。
+    Generate a video summary.
     """
     if not vector_store:
         return {}
@@ -302,44 +304,44 @@ def generate_video_summary(model_name: str, chapter: str, vector_store: Chroma, 
 
 def string_to_pdf_bytes(video_info: str, summary_text: str) -> bytes:
     """
-    将字符串转换为 PDF 字节流。
+    Convert string to PDF byte stream.
     """
     pdf_buffer = io.BytesIO()
     pdf = FPDF(format='A4')
     pdf.add_page()
 
-    # 添加支持 Unicode 的字体
+    # Add fonts supporting Unicode
     # pdf.add_font("ArialUnicode", style="", fname="ARIALUNI.TTF", uni=True)
     # pdf.set_font("ArialUnicode", size=12)
     font_path = r"C:\Users\王公子\Desktop\py\SimHei.ttf"
     pdf.add_font('SimHei', '', font_path, uni=True)
     pdf.set_font('SimHei', '', 12)
 
-    # 添加视频信息
+    # Add video information
     pdf.cell(0, 10, "Video Information:", ln=True)
     pdf.multi_cell(0, 10, video_info)
     pdf.cell(0, 10, "-----", ln=True)
 
-    # 添加摘要文本
+    # Add summary text
     pdf.multi_cell(0, 10, summary_text)
 
-    # 保存 PDF 内容到 BytesIO
+    # Save PDF content to BytesIO
     pdf.output(pdf_buffer)
 
-    # 返回 PDF 字节
+    # Return PDF bytes
     return pdf_buffer.getvalue()
 
 
 def display_summaries(summaries: List[Dict[str, str]]):
     """
-    在 Streamlit 中显示摘要。
+    Display summaries in Streamlit.
     """
     for summary_dict in summaries:
         chapter_title = f"## Chapter: {summary_dict['chapter']}"
         st.markdown(chapter_title)
 
         if '\n- ' in summary_dict['summary']:
-            # 处理子弹点格式
+            # Handle bullet point formatting
             summary_text = summary_dict['summary'].replace('\n- ', '\n* ')
             st.markdown(summary_text)
         else:
@@ -347,7 +349,7 @@ def display_summaries(summaries: List[Dict[str, str]]):
         st.write("---")
 
 
-# =================== 主应用逻辑 ===================
+# ================ Main Application Logic ================
 
 def main():
     st.set_page_config(page_title="YouTube Video Summarizer", layout="wide")
@@ -355,7 +357,7 @@ def main():
     title_with_logo = f'<img src="{youtube_logo_url}" width="100" style="vertical-align: middle;"> <span style="font-size:50px; vertical-align: middle; font-weight: bold; margin-left: 10px;">YouTube Video Summarizer</span>'
     st.markdown(title_with_logo, unsafe_allow_html=True)
 
-    # 初始化会话状态
+    # Initialize session state
     if 'summary' not in st.session_state:
         st.session_state['summary'] = []
     if 'chapters_list' not in st.session_state:
@@ -367,14 +369,14 @@ def main():
 
     st.sidebar.header("User Input")
 
-    # 输入API密钥和视频URL
+    # Input API keys and video URL
     openai_api_key = st.sidebar.text_input("Input OpenAI API Key", type="password")
     google_api_key = st.sidebar.text_input("Input Google API Key", type="password")
     video_url = st.sidebar.text_input("Input YouTube Video URL")
 
     if google_api_key:
         st.session_state['google_api_key'] = google_api_key
-    # 检查是否填写所有部分
+    # Check if all required fields are filled
     all_fields_filled = all([openai_api_key, google_api_key, video_url])
 
     if all_fields_filled:
@@ -384,7 +386,7 @@ def main():
             GOOGLE_API_KEY_ENV: google_api_key
         })
 
-    # 开始按钮
+    # Start button
     if st.sidebar.button("Start"):
         if not all_fields_filled:
             st.sidebar.error("Please fill out all fields")
@@ -421,7 +423,7 @@ def main():
                 st.error(f"Vector storage initialization failed: {e}")
                 return
 
-    # 显示视频信息
+    # Display video information
     if st.session_state['video_info']:
         st.header("Video Info")
         video_info = st.session_state['video_info']
@@ -429,7 +431,7 @@ def main():
         st.markdown(f"**Video Title:** {video_info.get('title', 'N/A')}")
         st.markdown(f"**Tags:** {', '.join(video_info.get('tags', []))}")
 
-    # 章节选择和摘要类型选择
+    # Chapter selection and summary type selection
     if st.session_state['chapters_list']:
         st.header("Chapter Selection")
         selected_chapters = st.multiselect(
@@ -459,16 +461,17 @@ def main():
                 except Exception as e:
                     st.error(f"Failed to generate summary: {e}")
 
-    # 显示摘要
+    # Display summary
     if st.session_state['summary']:
         st.header("Video Summary")
         display_summaries(st.session_state['summary'])
 
-        # 准备 PDF 内容
+        # Prepare PDF content
         video_info_text = f"Channel Title: {st.session_state['video_info'].get('channelTitle', 'N/A')}\nVideo Title: {st.session_state['video_info'].get('title', 'N/A')}\nTags: {', '.join(st.session_state['video_info'].get('tags', []))}\n"
-        full_summary_text = "\n\n".join([f"Chapter: {s['chapter']}\n{s['summary']}" for s in st.session_state['summary']])
+        full_summary_text = "\n\n".join(
+            [f"Chapter: {s['chapter']}\n{s['summary']}" for s in st.session_state['summary']])
 
-        # 生成 PDF
+        # Generate PDF
         pdf_bytes = string_to_pdf_bytes(video_info_text, full_summary_text)
 
         st.download_button(
